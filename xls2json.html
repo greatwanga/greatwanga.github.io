@@ -5,6 +5,9 @@
     <title>Excel/CSV to JSON 변환기</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <style>
+        body {
+            font-size: 14px;
+        }
         #drop-area {
             position: fixed;
             top: 50%;
@@ -61,6 +64,7 @@
         th, td {
             padding: 8px;
             text-align: left;
+            position: relative;
         }
         th {
             background-color: #f2f2f2;
@@ -84,6 +88,22 @@
             align-items: center;
             justify-content: space-between;
         }
+        .selected {
+            background-color: #FFD580 !important;
+        }
+        .data-row {
+            background-color: #FFFACD !important;
+        }
+        .key-badge {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background-color: #FF6347;
+            color: white;
+            padding: 2px 5px;
+            font-size: 12px;
+            border-radius: 3px;
+        }
     </style>
 </head>
 <body>
@@ -103,15 +123,6 @@
             <div class="form-group">
                 <select class="form-control" id="sheet-select" onchange="displaySheet()">
                     <option value="" disabled hidden selected>시트 선택</option>
-                    <!-- 시트 목록이 여기에 추가됩니다 -->
-                </select>
-            </div>
-            <div class="form-group">
-                <select class="form-control" id="conversion-method">
-                    <option value="" disabled hidden selected>변환 방법 선택</option>
-                    <option value="json-method1">JSON 방법 1</option>
-                    <option value="json-method2">JSON 방법 2</option>
-                    <!-- 필요한 경우 더 많은 방법 추가 -->
                 </select>
             </div>
             <button class="btn btn-success" onclick="convertToJSON()">JSON으로 변환</button>
@@ -146,7 +157,11 @@
         let selectedFile;
         let workbook;
         let dragCounter = 0;
+        let headerRowIndex = null;
+        let selectedCols = [];
+        let keyColIndex = null;
 
+        // 드래그 앤 드롭 이벤트 처리
         $(document).on('dragenter', (event) => {
             event.preventDefault();
             event.stopPropagation();
@@ -176,19 +191,17 @@
             handleFiles(event.originalEvent.dataTransfer.files);
         });
 
+        // 파일 선택 처리
         function handleFiles(files) {
             if (files.length > 0) {
                 selectedFile = files[0];
                 $('#file-name').text(`선택된 파일: ${selectedFile.name}`);
-                console.log('File selected:', selectedFile.name);
-                $('.tab-content').hide();
-                $('.json-tab').hide();
-                $('.json-buttons').hide();
-                $('.conversion-controls').hide();
+                resetUI();
                 loadFile();
             }
         }
 
+        // 파일 로드
         function loadFile() {
             const fileExtension = selectedFile.name.split('.').pop().toLowerCase();
             const reader = new FileReader();
@@ -208,6 +221,7 @@
             }
         }
 
+        // 시트 선택 목록 채우기
         function populateSheetSelect() {
             const sheetSelect = $('#sheet-select');
             sheetSelect.empty();
@@ -224,51 +238,155 @@
             $('.conversion-controls').show();
         }
 
+        // 시트 표시
         function displaySheet() {
             const sheetIndex = $('#sheet-select').val();
-            if (sheetIndex === '') return;
+            if (!sheetIndex) return;
+
+            // 시트 변경 시 초기화
+            headerRowIndex = null;
+            selectedCols = [];
+            keyColIndex = null;
+
             const worksheet = workbook.Sheets[workbook.SheetNames[sheetIndex]];
-            const tableHTML = XLSX.utils.sheet_to_html(worksheet);
-            $('#table-container').html(tableHTML);
-            $('#table-container table').addClass('table table-striped table-bordered');
+            try {
+                const tableHTML = XLSX.utils.sheet_to_html(worksheet);
+                $('#table-container').html(tableHTML);
+                const table = $('#table-container table');
+                table.addClass('table table-striped table-bordered');
+
+                // td 클릭 이벤트 추가
+                table.find('td').on('click', function() {
+                    const colIndex = $(this).index();
+                    const rowIndex = $(this).closest('tr').index();
+
+                    if (headerRowIndex === null || headerRowIndex !== rowIndex) {
+                        headerRowIndex = rowIndex;
+                        selectedCols = [colIndex];
+                        keyColIndex = null;
+                        table.find('td').removeClass('selected data-row');
+                        table.find('.key-badge').remove();
+                        $(this).addClass('selected');
+                    } else {
+                        if (selectedCols.includes(colIndex)) {
+                            if ($(this).find('.key-badge').length > 0) {
+                                // Key 뱃지 제거 및 선택 해제
+                                $(this).find('.key-badge').remove();
+                                keyColIndex = null;
+                                selectedCols = selectedCols.filter(index => index !== colIndex);
+                                $(this).removeClass('selected');
+                            } else {
+                                // Key 뱃지 추가
+                                table.find('.key-badge').remove();
+                                $(this).append('<span class="key-badge">Key</span>');
+                                keyColIndex = colIndex;
+                            }
+                        } else {
+                            selectedCols.push(colIndex);
+                            $(this).addClass('selected');
+                        }
+                    }
+
+                    // 데이터 행 하이라이트
+                    table.find('tr').each(function(index) {
+                        const row = $(this);
+                        row.find('td').each(function(tdIndex) {
+                            if (index > headerRowIndex && selectedCols.includes(tdIndex)) {
+                                $(this).addClass('data-row');
+                            } else {
+                                $(this).removeClass('data-row');
+                            }
+                        });
+                    });
+                });
+
+                $('.conversion-method-group').show();
+            } catch (error) {
+                $('#table-container').html('<p>내용이 없습니다.</p>');
+                $('.conversion-method-group').hide();
+            }
             $('.tab-content').show();
+            $('.json-tab').hide();
+            $('.json-buttons').hide();
+            $('#table-tab').tab('show');
         }
 
+        // JSON으로 변환
         function convertToJSON() {
             const sheetIndex = $('#sheet-select').val();
-            if (sheetIndex === '') return;
-            const worksheet = workbook.Sheets[workbook.SheetNames[sheetIndex]];
-            const method = $('#conversion-method').val();
-            if (method === '') return;
-            let json;
-            if (method === 'json-method1') {
-                json = XLSX.utils.sheet_to_json(worksheet);
-            } else if (method === 'json-method2') {
-                json = customSheetToJson(worksheet);
+            if (!sheetIndex) return;
+            if (headerRowIndex === null) {
+                alert('헤더 행을 선택하세요.');
+                return;
             }
+            const worksheet = workbook.Sheets[workbook.SheetNames[sheetIndex]];
+            if (selectedCols.length === 0) {
+                alert('적어도 하나의 컬럼을 선택하세요.');
+                return;
+            }
+            const json = customSheetToJsonWithHeader(worksheet, headerRowIndex, selectedCols, keyColIndex);
             $('#json-output').text(JSON.stringify(json, null, 2));
             $('.json-tab').show();
             $('.json-buttons').show();
             $('#json-tab').tab('show');
         }
 
-        function customSheetToJson(worksheet) {
-            const json = [];
+        // 시트 데이터를 JSON으로 변환
+        function customSheetToJsonWithHeader(worksheet, headerRow, selectedCols, keyColIndex) {
+            let json;
+            if (keyColIndex === null || (keyColIndex !== null && selectedCols.length === 1)) {
+                json = [];
+            } else if (selectedCols.length === 2 && keyColIndex !== null) {
+                json = [];
+            } else {
+                json = {};
+            }
+
             const range = XLSX.utils.decode_range(worksheet['!ref']);
-            for (let R = range.s.r; R <= range.e.r; ++R) {
-                const row = {};
-                for (let C = range.s.c; C <= range.e.c; ++C) {
-                    const cell_address = { c: C, r: R };
-                    const cell_ref = XLSX.utils.encode_cell(cell_address);
-                    if (worksheet[cell_ref]) {
-                        row[cell_ref] = worksheet[cell_ref].v;
+            const headers = [];
+            selectedCols.forEach((colIndex) => {
+                const cell_address = { c: colIndex, r: headerRow };
+                const cell_ref = XLSX.utils.encode_cell(cell_address);
+                if (worksheet[cell_ref]) {
+                    headers.push(worksheet[cell_ref].v);
+                }
+            });
+
+            for (let R = headerRow + 1; R <= range.e.r; ++R) {
+                let row = {};
+                let key = null;
+                if (keyColIndex !== null) {
+                    const keyCellAddress = { c: keyColIndex, r: R };
+                    const keyCellRef = XLSX.utils.encode_cell(keyCellAddress);
+                    key = worksheet[keyCellRef] ? worksheet[keyCellRef].v : null;
+                    if (selectedCols.length === 1 && selectedCols[0] === keyColIndex) {
+                        json.push(key);
+                        continue;
                     }
                 }
-                json.push(row);
+                selectedCols.forEach((colIndex, index) => {
+                    if (colIndex === keyColIndex) return;
+                    const cell_address = { c: colIndex, r: R };
+                    const cell_ref = XLSX.utils.encode_cell(cell_address);
+                    if (worksheet[cell_ref]) {
+                        if (selectedCols.length === 2 && keyColIndex !== null) {
+                            json.push({ [key]: worksheet[cell_ref].v });
+                        } else if (keyColIndex !== null) {
+                            if (!json[key]) json[key] = {};
+                            json[key][headers[index]] = worksheet[cell_ref].v;
+                        } else {
+                            row[headers[index]] = worksheet[cell_ref].v;
+                        }
+                    }
+                });
+                if (keyColIndex === null) {
+                    json.push(row);
+                }
             }
             return json;
         }
 
+        // JSON 복사
         function copyJSON() {
             const jsonOutput = $('#json-output').text();
             navigator.clipboard.writeText(jsonOutput).then(() => {
@@ -276,6 +394,7 @@
             });
         }
 
+        // JSON 저장
         function saveJSON() {
             const jsonOutput = $('#json-output').text();
             const blob = new Blob([jsonOutput], { type: 'application/json' });
@@ -285,6 +404,19 @@
             a.download = 'converted.json';
             a.click();
             URL.revokeObjectURL(url);
+        }
+
+        // UI 초기화
+        function resetUI() {
+            $('.tab-content').hide();
+            $('.json-tab').hide();
+            $('.json-buttons').hide();
+            $('.conversion-controls').hide();
+            $('#table-container').empty();
+            $('#sheet-select').val('');
+            headerRowIndex = null;
+            selectedCols = [];
+            keyColIndex = null;
         }
     </script>
 </body>
