@@ -105,14 +105,11 @@
             background-color: #FFFACD !important;
         }
         .key-icon {
-            position: absolute;
-            top: 0;
-            right: 0;
-            background-color: #FF6347;
-            color: white;
-            padding: 2px 5px;
-            font-size: 12px;
-            border-radius: 3px;
+            position: relative; /* 기존 absolute에서 relative로 변경 */
+            margin-left: 5px; /* 아이콘과 텍스트 간격 추가 */
+            color: #FF6347; /* 아이콘 색상 */
+            font-size: 14px; /* 아이콘 크기 */
+            vertical-align: middle; /* 텍스트와 수직 정렬 */
         }
         .json-buttons .btn, .php-buttons .btn {
             font-size: 12px;
