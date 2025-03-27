@@ -157,6 +157,35 @@
             background-color: #0056b3;
             box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
         }
+        .swal2-header-container {
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        font-size: 14px;
+        }
+        .swal2-header-label {
+            flex: 1;
+            text-align: right;
+            margin-right: 5px;
+        }
+        .swal2-header-input {
+            flex: 2;
+            padding: 5px 10px;
+        }
+        .swal2-header-input[readonly] {
+            background-color: #f8f9fa;
+            border: none;
+            cursor: not-allowed;
+        }
+        .swal2-header-input.error {
+            background-color: #ffcccc;
+        }
+        .swal2-header-checkbox {
+            width: 20px; /* 체크박스 크기 */
+            height: 20px; /* 체크박스 크기 */
+            margin-left: 5px; /* 인풋박스와의 간격 */
+            vertical-align: middle; /* 체크박스 정렬 */
+        }
     </style>
 </head>
 <body>
@@ -272,7 +301,17 @@
                             <li>그 외의 데이터는 <strong>문자열</strong>로 변환됩니다.</li>
                         </ul>
                     </p>
-                    <h6>6. 결과 확인 및 저장</h6>
+                    <h6>6. 헤더 이름 확인 및 자료형 설정</h6>
+                    <p>
+                        데이터를 변환하기 전에, 선택된 컬럼의 <strong>헤더 이름</strong>과 <strong>자료형 자동 변환 여부</strong>를 확인할 수 있습니다:
+                        <ul>
+                            <li>컨펌창에서 각 컬럼의 헤더 이름을 수정할 수 있습니다. 단, <strong>키 컬럼</strong>은 수정할 수 없습니다.</li>
+                            <li>각 컬럼 옆의 체크박스를 통해 <strong>자료형 자동 변환</strong> 여부를 설정할 수 있습니다.</li>
+                            <li>체크박스를 해제하면 해당 컬럼의 데이터는 <strong>문자열</strong>로 변환됩니다.</li>
+                            <li>중복된 헤더 이름이 있을 경우, 오류 메시지가 표시되며 수정이 필요합니다.</li>
+                        </ul>
+                    </p>
+                    <h6>7. 결과 확인 및 저장</h6>
                     <p>변환된 데이터를 확인하고, 복사하거나 저장할 수 있습니다.</p>
                 </div>
                 <div class="modal-footer">
@@ -390,7 +429,6 @@
 
         // 로딩 오버레이 숨김 함수
         function hideLoading(delay = 0) {
-            console.log('hideLoading', delay);
             setTimeout(() => {
                 $('#loading-overlay').hide();
             }, delay);
@@ -431,7 +469,6 @@
                 if (fileExtension === 'xml') {
                     const x2js = new X2JS();
                     const json = x2js.xml2js(data);
-                    console.log('XML 데이터:', json);
 
                     // JSON 데이터 내에서 배열을 탐색하여 첫 번째 배열을 찾는 함수
                     function findFirstArray(obj) {
@@ -644,7 +681,6 @@
                     chunkStr = JSON.stringify(chunk, null, 2).slice(1, -2); // 객체의 중괄호 제거
                 }
 
-                console.log('displayJSON-addData', currentIndex, endIndex, chunk.length);
                 if (currentIndex === 0) {
                     jsonOutput.append(Array.isArray(json) ? `[${chunkStr}` : `{${chunkStr}`);
                 } else {
@@ -701,7 +737,6 @@
             function addData() {
                 const endIndex = Math.min(currentIndex + chunkSize, phpCode.length);
                 const chunk = phpCode.slice(currentIndex, endIndex);
-                console.log('displayPHP-addData', currentIndex, endIndex, chunk.length);
                 phpOutput.append(chunk);
                 currentIndex = endIndex;
                 if (currentIndex >= phpCode.length) {
@@ -754,13 +789,17 @@
                 hideLoading();
                 return;
             }
-            const json = customSheetToJsonWithHeader(worksheet, headerRowIndex, selectedCols, keyColIndex);
-            displayJSON(json);
-            fullJSON = json; // 전체 JSON 데이터를 전역 변수에 저장
-            $('.json-tab').show();
-            $('.json-buttons').show();
-            $('#json-tab').tab('show');
-            hideLoading();
+
+            // 헤더 이름 확인 및 변경
+            getHeadersWithConfirmation(worksheet, headerRowIndex, selectedCols, (autoTypeConversion) => {
+                const json = customSheetToJsonWithHeader(worksheet, headerRowIndex, selectedCols, keyColIndex, autoTypeConversion);
+                displayJSON(json);
+                fullJSON = json; // 전체 JSON 데이터를 전역 변수에 저장
+                $('.json-tab').show();
+                $('.json-buttons').show();
+                $('#json-tab').tab('show');
+                hideLoading();
+            });
         }
 
         // PHP 코드로 변환
@@ -782,18 +821,127 @@
                 hideLoading();
                 return;
             }
-            const json = customSheetToJsonWithHeader(worksheet, headerRowIndex, selectedCols, keyColIndex);
-            const phpCode = jsonToPHP(json);
-            displayPHP(phpCode);
-            fullPHP = phpCode; // 전체 PHP 코드를 전역 변수에 저장
-            $('.php-tab').show();
-            $('.php-buttons').show();
-            $('#php-tab').tab('show');
-            hideLoading();
+
+            // 헤더 이름 확인 및 변경
+            getHeadersWithConfirmation(worksheet, headerRowIndex, selectedCols, (autoTypeConversion) => {
+                const json = customSheetToJsonWithHeader(worksheet, headerRowIndex, selectedCols, keyColIndex, autoTypeConversion);
+                const phpCode = jsonToPHP(json);
+                displayPHP(phpCode);
+                fullPHP = phpCode; // 전체 PHP 코드를 전역 변수에 저장
+                $('.php-tab').show();
+                $('.php-buttons').show();
+                $('#php-tab').tab('show');
+                hideLoading();
+            });
+        }
+
+        // 헤더 이름 확인 및 변경
+        function getHeadersWithConfirmation(worksheet, headerRow, selectedCols, onConfirm) {
+            const isKeyValueMode = selectedCols.length === 2 && keyColIndex !== null;
+
+            // 키 컬럼 하나만 선택되었거나 키-밸류 형태인 경우 컨펌 창을 띄우지 않음
+            if ((selectedCols.length === 1 && selectedCols[0] === keyColIndex) || isKeyValueMode) {
+                onConfirm(selectedCols.map(() => true)); // 기본적으로 모든 컬럼에 대해 자동 변환 활성화
+                hideLoading();
+                return;
+            }
+
+            const headers = selectedCols.map((colIndex) => {
+                const cell_address = { c: colIndex, r: headerRow };
+                const cell_ref = XLSX.utils.encode_cell(cell_address);
+                return worksheet[cell_ref] ? worksheet[cell_ref].v : `Column_${colIndex + 1}`;
+            });
+
+            const inputFields = headers.map((header, index) => {
+                const isKeyColumn = index === selectedCols.indexOf(keyColIndex);
+                return `
+                    <div class="swal2-header-container">
+                        <label class="swal2-header-label">
+                            ${isKeyColumn ? `<i class="fas fa-key key-icon"></i>` : ''}
+                            ${header}
+                        </label>
+                        <input type="text" class="swal2-header-input" data-index="${index}" placeholder="${header}" value="${header}" ${isKeyColumn ? 'readonly' : ''}>
+                        <input type="checkbox" class="swal2-header-checkbox" data-index="${index}" checked
+                            title="자동으로 자료형을 변환합니다. 체크 해제 시 문자열로 변환됩니다.">
+                    </div>
+                `;
+            }).join('');
+
+            Swal.fire({
+                title: '헤더 이름 확인 및 변경',
+                html: `
+                    <form id="header-form">
+                        ${inputFields}
+                    </form>
+                `,
+                showCancelButton: true,
+                confirmButtonText: '확인',
+                cancelButtonText: '취소',
+                preConfirm: () => {
+                    const inputs = document.querySelectorAll('.swal2-header-input:not([readonly])');
+                    const checkboxes = document.querySelectorAll('.swal2-header-checkbox');
+                    const newHeaders = Array.from(inputs).map(input => input.value.trim());
+                    const autoTypeConversion = Array.from(checkboxes).map(checkbox => checkbox.checked);
+                    const duplicates = findDuplicates(newHeaders);
+
+                    // 모든 입력 필드의 배경색 초기화
+                    inputs.forEach(input => input.classList.remove('error'));
+
+                    if (duplicates.length > 0) {
+                        duplicates.forEach(index => {
+                            inputs[index].classList.add('error'); // 중복된 필드 배경색 변경
+                        });
+                        Swal.showValidationMessage('중복된 헤더 이름이 있습니다.');
+                        return false;
+                    }
+
+                    // 키 컬럼의 헤더를 포함하여 반환
+                    return {
+                        headers: headers.map((header, index) => {
+                            if (index === selectedCols.indexOf(keyColIndex)) {
+                                return header; // 키 컬럼의 헤더는 변경하지 않음
+                            }
+                            return newHeaders.shift(); // 나머지 헤더는 사용자가 입력한 값으로 변경
+                        }),
+                        autoTypeConversion
+                    };
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    const { headers: updatedHeaders, autoTypeConversion } = result.value;
+                    updateHeaders(worksheet, headerRow, selectedCols, updatedHeaders);
+                    onConfirm(autoTypeConversion); // 자료형 자동 변환 여부 전달
+                } else {
+                    hideLoading(); // 취소 시 로딩 숨김
+                }
+            });
+        }
+
+        // 중복 확인
+        function findDuplicates(array) {
+            const seen = {};
+            const duplicates = [];
+            array.forEach((item, index) => {
+                if (seen[item]) {
+                    duplicates.push(index);
+                } else {
+                    seen[item] = true;
+                }
+            });
+            return duplicates;
+        }
+
+        // 헤더 업데이트
+        function updateHeaders(worksheet, headerRow, selectedCols, newHeaders) {
+            selectedCols.forEach((colIndex, index) => {
+                const cell_address = { c: colIndex, r: headerRow };
+                const cell_ref = XLSX.utils.encode_cell(cell_address);
+                worksheet[cell_ref] = { v: newHeaders[index] };
+            });
         }
 
         // 시트 데이터를 JSON으로 변환
-        function customSheetToJsonWithHeader(worksheet, headerRow, selectedCols, keyColIndex) {
+        function customSheetToJsonWithHeader(worksheet, headerRow, selectedCols, keyColIndex, autoTypeConversion) {
             let json;
             if (keyColIndex === null || (keyColIndex !== null && selectedCols.length === 1)) {
                 json = [];
@@ -801,21 +949,22 @@
                 json = {};
             }
 
-            const range = XLSX.utils.decode_range(worksheet['!ref']);
-            const headers = [];
-            const columnTypes = {}; // 각 컬럼의 자료형 저장
-
-            // 헤더 가져오기
-            selectedCols.forEach((colIndex) => {
+            const headers = selectedCols.map((colIndex) => {
                 const cell_address = { c: colIndex, r: headerRow };
                 const cell_ref = XLSX.utils.encode_cell(cell_address);
-                if (worksheet[cell_ref]) {
-                    headers.push(worksheet[cell_ref].v);
-                }
+                return worksheet[cell_ref] ? worksheet[cell_ref].v : `Column_${colIndex + 1}`;
             });
+
+            const range = XLSX.utils.decode_range(worksheet['!ref']);
+            const columnTypes = {}; // 각 컬럼의 자료형 저장
 
             // 각 컬럼의 자료형 결정
             selectedCols.forEach((colIndex, index) => {
+                if (!autoTypeConversion[index]) {
+                    columnTypes[headers[index]] = 'string'; // 자동 변환 비활성화 시 문자열로 처리
+                    return;
+                }
+
                 const values = [];
                 for (let R = headerRow + 1; R <= range.e.r; ++R) {
                     const cell_address = { c: colIndex, r: R };
@@ -865,6 +1014,8 @@
                             value = Number(value);
                         } else if (columnType === 'boolean') {
                             value = value === 'true';
+                        } else if (columnType === 'string') {
+                            value = String(value);
                         }
 
                         if (selectedCols.length === 2 && keyColIndex !== null) {
